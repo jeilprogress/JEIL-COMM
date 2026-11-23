@@ -135,10 +135,10 @@
         <form class="search-card" id="searchForm">
           <div class="search-top"><label class="search-title" for="trackingInput">Track your commission</label><span class="small-counter">01 / LOOKUP</span></div>
           <div class="search-row">
-            <input class="search-field" id="trackingInput" name="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AU-3" maxlength="15" aria-describedby="searchHelp" required />
+            <input class="search-field" id="trackingInput" name="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AU-3847" maxlength="15" aria-describedby="searchHelp" required />
             <button class="search-submit" id="searchBtn" type="submit"><span>TRACK STATUS</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 12h16m-7-7 7 7-7 7"/></svg></button>
           </div>
-          <div class="search-help" id="searchHelp"><span>Your tracking code is shared by email after your commission is accepted.</span><button type="button" class="sample-link" id="demoBtn">Try sample AU-3</button></div>
+          <div class="search-help" id="searchHelp"><span>Your tracking code is shared by email after your commission is received.</span><button type="button" class="sample-link" id="demoBtn">Try sample AU-3</button></div>
         </form>
         <div id="resultMount" class="result-mount" aria-live="polite" aria-atomic="true"></div>
       </section>
@@ -153,6 +153,28 @@
     const form = document.querySelector('#searchForm');
     const input = document.querySelector('#trackingInput');
     const mount = document.querySelector('#resultMount');
+    const copyCode = document.createElement('button');
+    copyCode.type = 'button';
+    copyCode.className = 'sample-link';
+    copyCode.textContent = 'Copy code';
+    copyCode.hidden = true;
+    form.after(copyCode);
+    copyCode.addEventListener('click', async () => {
+      const code = normalizeCode(input.value);
+      if (!code) return;
+      try {
+        await navigator.clipboard.writeText(code);
+        copyCode.textContent = 'Copied';
+      } catch {
+        input.focus();
+        input.select();
+        copyCode.textContent = 'Code selected';
+      }
+    });
+    input.addEventListener('input', () => {
+      copyCode.hidden = !normalizeCode(input.value);
+      copyCode.textContent = 'Copy code';
+    });
     const submitBtn = document.querySelector('#searchBtn');
     const themeBtn = document.querySelector('#themeBtn');
     const demoBtn = document.querySelector('#demoBtn');
@@ -242,8 +264,10 @@
     }
     async function lookup() {
       const code = normalizeCode(input.value);
-      if (!code) return showMessage('Invalid tracking code','Enter your code in the format AU-3 (or AU-12).');
+      if (!code) return showMessage('Invalid tracking code','Enter the tracking code from your receipt, for example AU-3847.');
       input.value = code;
+      copyCode.hidden = false;
+      copyCode.textContent = 'Copy code';
       submitBtn.disabled = true;
       submitBtn.querySelector('span').textContent = 'CHECKING...';
       mount.replaceChildren();

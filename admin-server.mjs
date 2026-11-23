@@ -1,5 +1,7 @@
 import { createServer } from 'node:http';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+
+import { receiptConfigured, sendReceipt } from './receipt-mail.mjs';
 
 const password = process.env.ADMIN_PASSWORD;
 const token = process.env.GITHUB_TOKEN;
@@ -7,6 +9,7 @@ const endpoint = 'https://api.github.com/repos/jeilprogress/JEIL-COMM/contents/c
 const digest = value => createHash('sha256').update(value).digest();
 const statuses = ['Received', 'Accepted', 'On-going', 'Completed'];
 const fields = ['code', 'title', 'status', 'updated_at', 'note', 'x_link', 'telegram_link'];
+const sending = new Set();
 let failures = 0;
 let retryAt = 0;
 
@@ -75,7 +78,12 @@ body{font-family:"DM Sans",Arial,sans-serif;background:radial-gradient(ellipse a
 <section id="loginPanel" class="panel login-card"><div class="panel-header"><h2>Admin sign-in</h2></div><form id="login"><div class="field"><label for="password">Admin password</label><input type="password" id="password" autocomplete="current-password" required></div><button class="btn primary">Sign in →</button><p id="loginMessage" class="feedback" role="status"></p></form></section>
 <section id="editor" hidden><div class="workspace-actions"><p class="tiny">Updates publish to the public tracker after you save.</p><button class="btn" id="logout" type="button">Sign out</button></div>
 <div class="grid"><section class="panel"><div class="panel-header"><h2>Commissions <span class="pill" id="count"></span></h2><button class="btn" id="add" type="button">+ New commission</button></div><div class="records" id="records" aria-label="Commissions"></div></section>
-<section class="panel"><div class="panel-header"><h2 id="editTitle">Edit commission</h2></div><form class="form-area" id="edit"><div class="form-grid" id="fields"></div><div class="form-actions"><button class="btn primary">Save to live tracker →</button><p id="message" class="feedback" role="status"></p></div></form></section></div></section>
+<section class="panel"><div class="panel-header"><h2 id="editTitle">Edit commission</h2></div><form class="form-area" id="edit"><div class="form-grid" id="fields"></div><div class="form-actions"><button class="btn primary">Save to live tracker →</button><p id="message" class="feedback" role="status"></p></div></form>
+<form class="form-area" id="receipt" hidden style="border-top:1px solid var(--line)">
+<h2>Commission receipt</h2><p class="tiny">Confirm receipt manually, then send the client their tracking code from jlmigorii@gmail.com.</p>
+<div class="field"><label for="email">Client email</label><input id="email" type="email" maxlength="254" required></div>
+<div class="form-actions"><button class="btn primary">Send receipt</button><p id="receiptMessage" class="feedback" role="status"></p></div>
+</form></section></div></section>
 <footer class="foot">Jeil Comm. · Commission Studio</footer>
 </main><script src="/admin.js" defer></script></body></html>`;
 
@@ -106,7 +114,8 @@ for (const [key, name] of Object.entries(fields)) {
   }
   if (key === 'updated_at') input.type = 'date';
   if (key.endsWith('_link')) input.type = 'url';
-  input.required = ['code', 'status'].includes(key);
+  input.required = key === 'status';
+  if (key === 'code') input.readOnly = true;
   input.id = label.htmlFor;
   input.maxLength = 4000;
   field.append(label, input);
@@ -114,8 +123,8 @@ for (const [key, name] of Object.entries(fields)) {
   inputs[key] = input;
 }
 let password, state;
-async function request(method, data) {
-  const response = await fetch('/api/commissions', {
+async function request(method, data, path = '/api/commissions') {
+  const response = await fetch(path, {
     method,
     headers: {'Content-Type': 'application/json', 'X-Admin-Password': encodeURIComponent(password)},
     body: data && JSON.stringify(data),
@@ -164,13 +173,17 @@ function populate(index) {
   const record = state.commissions[index] || {};
   get('editTitle').textContent = index === -1 ? 'New commission' : 'Edit ' + record.code;
   for (const key of Object.keys(inputs)) inputs[key].value = record[key] || '';
+  inputs.code.placeholder = 'Assigned when saved';
+  get('receipt').hidden = index === -1 || record.status !== 'Received' || !/^AU-[1-9][0-9]{3}$/.test(record.code);
+  get('email').value = '';
+  get('receiptMessage').textContent = '';
   const status = String(record.status || '').trim().toLowerCase();
   inputs.status.value = index === -1 ? 'Received' : statuses.find(value => value.toLowerCase() === status) || statusAliases[status] || '';
 }
 get('add').onclick = () => {
   get('message').textContent = '';
   populate(-1);
-  inputs.code.focus();
+  inputs.title.focus();
 };
 get('logout').onclick = () => location.reload();
 get('login').onsubmit = async event => {
@@ -210,6 +223,23 @@ get('edit').onsubmit = async event => {
   } catch (error) {
     get('message').textContent = error.message;
   } finally { editor.inert = false; button.disabled = false; button.focus(); }
+};
+get('receipt').onsubmit = async event => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button');
+  const email = get('email').value.trim();
+  const code = state.commissions[selected].code;
+  const editor = get('editor');
+  editor.inert = true;
+  button.disabled = true;
+  get('receiptMessage').textContent = 'Sending receipt…';
+  try {
+    await request('POST', {email, code}, '/api/receipt');
+    get('receiptMessage').textContent = 'Gmail accepted the receipt for ' + email + '.';
+    get('email').value = '';
+  } catch (error) {
+    get('receiptMessage').textContent = error.message;
+  } finally { editor.inert = false; button.disabled = false; button.focus(); }
 };`;
 
 function json(res, status, data) {
@@ -231,7 +261,8 @@ createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
     return res.end(script);
   }
-  if (req.url !== '/api/commissions' || !['GET', 'PUT'].includes(req.method)) {
+  const isReceipt = req.url === '/api/receipt' && req.method === 'POST';
+  if (!isReceipt && (req.url !== '/api/commissions' || !['GET', 'PUT'].includes(req.method))) {
     return json(res, 404, { error: 'Page not found.' });
   }
   if (!token || !password || password.length < 16) {
@@ -252,7 +283,7 @@ createServer(async (req, res) => {
 
   try {
     let data;
-    if (req.method === 'PUT') {
+    if (req.method !== 'GET') {
       let body = '';
       for await (const chunk of req) {
         body += chunk;
@@ -265,18 +296,41 @@ createServer(async (req, res) => {
     const commissions = document.commissions;
     if (!Array.isArray(commissions)) throw new Error('Invalid tracker data');
     if (req.method === 'GET') return json(res, 200, { sha: file.sha, commissions });
+    if (isReceipt) {
+      if (!receiptConfigured()) return json(res, 503, { error: 'Connect the Gmail sender in Render to enable receipts.' });
+      const email = data?.email;
+      const code = data?.code;
+      if (typeof email !== 'string' || email.length > 254 ||
+          !/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(email)) {
+        return json(res, 400, { error: 'Enter a valid client email address.' });
+      }
+      if (typeof code !== 'string' || !/^AU-[1-9]\d{3}$/.test(code) ||
+          !commissions.some(record => record.code === code && record.status === 'Received')) {
+        return json(res, 400, { error: 'Save a commission with a four-digit tracking code and Received status first.' });
+      }
+      if (sending.has(code)) return json(res, 409, { error: 'A receipt for this code is already sending.' });
+      sending.add(code);
+      try {
+        await sendReceipt(email, code);
+        return json(res, 200, { ok: true });
+      } catch (error) {
+        return json(res, 502, { error: error.message });
+      } finally { sending.delete(code); }
+    }
     if (data?.sha !== file.sha) return json(res, 409, { error: 'The tracker changed since you opened it. Keep a copy of your changes, then reload before saving.' });
     if (!Number.isInteger(data.index) || data.index < -1 || data.index >= commissions.length ||
         !data.record || fields.some(key => typeof data.record[key] !== 'string' || data.record[key].length > 4000)) {
       return json(res, 400, { error: 'Invalid commission details.' });
     }
     const record = Object.fromEntries(fields.map(key => [key, data.record[key].trim()]));
-    const match = record.code.match(/^AU-?(\d{1,6})$/i);
-    if (!match) return json(res, 400, { error: 'Use a tracking code like AU-4.' });
     if (!statuses.includes(record.status)) return json(res, 400, { error: 'Choose a valid commission status.' });
-    record.code = 'AU-' + Number(match[1]);
-    if (commissions.some((item, i) => i !== data.index && Number(String(item.code).replace(/^AU-?/i, '')) === Number(match[1]))) {
-      return json(res, 400, { error: 'This tracking code is already in use.' });
+    if (data.index === -1) {
+      const used = new Set(commissions.map(item => Number(String(item.code).replace(/^AU-?/i, ''))));
+      const available = Array.from({length: 9000}, (_, i) => i + 1000).filter(code => !used.has(code));
+      if (!available.length) return json(res, 409, { error: 'All four-digit tracking codes are in use.' });
+      record.code = 'AU-' + available[randomInt(available.length)];
+    } else {
+      record.code = commissions[data.index].code;
     }
     if (['x_link', 'telegram_link'].some(key => record[key] && !/^https?:\/\//i.test(record[key]))) {
       return json(res, 400, { error: 'Use full links beginning with https:// or http://.' });
