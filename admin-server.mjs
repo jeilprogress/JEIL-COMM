@@ -5,6 +5,7 @@ const password = process.env.ADMIN_PASSWORD;
 const token = process.env.GITHUB_TOKEN;
 const endpoint = 'https://api.github.com/repos/jeilprogress/JEIL-COMM/contents/commissions.json';
 const digest = value => createHash('sha256').update(value).digest();
+const statuses = ['Received', 'Accepted', 'On-going', 'Completed'];
 const fields = ['code', 'title', 'status', 'updated_at', 'note', 'x_link', 'telegram_link'];
 let failures = 0;
 let retryAt = 0;
@@ -31,6 +32,9 @@ const page = `<!doctype html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0a0a0a"><meta name="robots" content="noindex">
 <title>Jeil’s Commission Studio | Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
 <style>
 :root{--bg:#0a0a0a;--panel:#151515;--line:#353535;--fg:#fafafa;--muted:#999;--sub:#1e1e1e}
 *{box-sizing:border-box}body{background:var(--bg);color:var(--fg);font-family:Arial,Helvetica,sans-serif;margin:0;font-size:14px}button,input,select,textarea{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--fg);outline-offset:3px}button:disabled{opacity:.45;cursor:not-allowed}
@@ -40,10 +44,34 @@ const page = `<!doctype html>
 @media(max-width:900px){.grid{grid-template-columns:1fr}.records{max-height:380px}.actions .tiny{flex-basis:100%;margin-left:0}}@media(max-width:600px){.wrap{padding:0 18px}.head{align-items:start}.right-head{display:none}.hero{padding:45px 0 27px}.form-grid{grid-template-columns:1fr}.form-area{padding:20px}.panel-header{padding:20px}}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
 
 :root{color-scheme:dark}.brand-lockup{display:flex;align-items:center;gap:14px}.mark{display:grid;place-items:center;width:37px;height:37px;border:1px solid var(--line)}.mark svg{width:20px;height:20px}.head a{color:var(--fg);text-decoration:none}.head a:hover{text-decoration:underline}.hero em{font-weight:400}.hero p{margin-bottom:0}.login-card{max-width:450px;margin:30px 0 55px}.login-card form{padding:25px}.login-card .btn{width:100%}.feedback{min-height:0;padding:0;margin:14px 0 0}.feedback:empty{display:none}.record>span:first-child{display:grid;min-width:0}.record .status{white-space:normal;text-align:center}.panel-header .btn{margin-left:auto;white-space:nowrap}.workspace-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:22px 0}.workspace-actions p{margin:0}.form-actions .feedback{margin:0;flex-basis:100%}.grid{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)}@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}@media(max-width:600px){.brand{letter-spacing:.11em}.head{align-items:center}.head a{font-size:11px}.panel-header .btn{padding:10px}.record .title{max-width:100%}}
+
+:root{--fg:#f5f5f3;--panel:#141414;--line:#333;--muted:#aaa}
+body{font-family:"DM Sans",Arial,sans-serif;background:radial-gradient(ellipse at 80% 8%,#191919 0,transparent 42%),var(--bg);min-height:100vh}
+.wrap{max-width:1180px;padding-inline:clamp(20px,5vw,58px)}
+.head{min-height:86px;padding-block:18px}.head a{font-size:12px;color:var(--muted)}
+.hero{position:relative;isolation:isolate;overflow:hidden;padding:clamp(56px,9vw,115px) 0 42px}
+.hero h1{font-family:"DM Sans",Arial,sans-serif;font-weight:500;font-size:clamp(49px,8.2vw,101px);letter-spacing:-.085em;line-height:.92;max-width:8.7em;margin:22px 0}
+.hero em{font-family:"Instrument Serif",Georgia,serif;letter-spacing:-.055em;display:block}
+.hero p{font-size:15px;max-width:400px}
+.tag{display:flex;gap:12px;align-items:center}.tag::before{content:"";width:25px;height:1px;background:var(--muted)}
+.orbit{position:absolute;z-index:-1;right:4%;top:9%;width:min(32%,265px);aspect-ratio:1;pointer-events:none;display:grid;place-items:center;background:linear-gradient(90deg,transparent 49.8%,var(--line) 50%,transparent 50.2%),linear-gradient(transparent 49.8%,var(--line) 50%,transparent 50.2%)}
+.orbit span{position:absolute;inset:0;border:1px solid var(--line);border-radius:50%;animation:spin 24s linear infinite}
+.orbit span:nth-child(2){inset:15%;animation-duration:19s;animation-direction:reverse}.orbit span:nth-child(3){inset:31%;animation:none}
+.orbit span:first-child::after,.orbit span:nth-child(2)::after{content:"";position:absolute;width:5px;height:5px;left:calc(50% - 2px);top:-3px;border-radius:50%;background:var(--fg)}
+.orbit .mark{border-color:var(--fg);border-radius:50%;width:55px;height:55px;background:var(--bg)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.hero>div:first-child,.login-card,.grid{animation:rise .45s ease both}
+.login-card,.grid .panel{box-shadow:0 20px 55px #0005}
+.login-card{max-width:470px;margin-top:27px}.login-card form{padding:26px}.panel-header h2{font-size:16px;font-weight:600}
+.btn{transition:background .2s,color .2s,transform .2s}.btn.primary:hover{transform:translateY(-2px)}
+.field select{appearance:none;padding-right:42px;background:#0e0e0e linear-gradient(45deg,transparent 50%,#bbb 50%) calc(100% - 20px) 50% / 6px 6px no-repeat;background-image:linear-gradient(45deg,transparent 50%,#bbb 50%),linear-gradient(135deg,#bbb 50%,transparent 50%);background-position:calc(100% - 20px) 50%,calc(100% - 14px) 50%;background-size:6px 6px;background-repeat:no-repeat}
+@media(max-width:690px){.orbit{display:none}.hero{padding-top:57px}.hero h1{margin-block:20px}.hero p{font-size:13px}}
+@media(prefers-reduced-motion:reduce){.hero>div:first-child,.login-card,.grid,.orbit span{animation:none!important}}
 </style></head>
 <body><main class="wrap">
 <header class="head"><div class="brand-lockup"><div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20l4-.9L20 7a2 2 0 0 0-3-3L4.9 16 4 20Zm11-14 3 3"/></svg></div><div class="brand">JEIL COMM.<span>COMMISSION STUDIO</span></div></div><a href="https://jeilprogress.github.io/JEIL-COMM/">Public tracker ↗</a></header>
-<section class="hero"><div class="tag">Private workspace</div><h1 id="heroTitle">Welcome <em>back.</em></h1><p id="heroCopy">Sign in to manage your commissioned AUs.</p></section>
+<section class="hero"><div><div class="tag">Private workspace</div><h1 id="heroTitle">Welcome back, <em>Master!</em></h1><p id="heroCopy">Sign in to manage your commissioned AUs.</p></div><div class="orbit" aria-hidden="true"><span></span><span></span><span></span><div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20l4-.9L20 7a2 2 0 0 0-3-3L4.9 16 4 20Zm11-14 3 3"/></svg></div></div></section>
 <section id="loginPanel" class="panel login-card"><div class="panel-header"><h2>Admin sign-in</h2></div><form id="login"><div class="field"><label for="password">Admin password</label><input type="password" id="password" autocomplete="current-password" required></div><button class="btn primary">Sign in →</button><p id="loginMessage" class="feedback" role="status"></p></form></section>
 <section id="editor" hidden><div class="workspace-actions"><p class="tiny">Updates publish to the public tracker after you save.</p><button class="btn" id="logout" type="button">Sign out</button></div>
 <div class="grid"><section class="panel"><div class="panel-header"><h2>Commissions <span class="pill" id="count"></span></h2><button class="btn" id="add" type="button">+ New commission</button></div><div class="records" id="records" aria-label="Commissions"></div></section>
@@ -57,6 +85,12 @@ const fields = {
   code: 'Tracking code', title: 'Story title', status: 'Status', updated_at: 'Last updated',
   note: 'Public note', x_link: 'X link', telegram_link: 'Telegram link'
 };
+const statuses = ${JSON.stringify(statuses)};
+const statusAliases = {
+  pending: 'Received', queued: 'Accepted', confirmed: 'Accepted', ongoing: 'On-going',
+  'in progress': 'On-going', 'in-progress': 'On-going', writing: 'On-going', editing: 'On-going',
+  'on hold': 'On-going', paused: 'On-going', finished: 'Completed', published: 'Completed'
+};
 const inputs = {};
 for (const [key, name] of Object.entries(fields)) {
   const field = document.createElement('div');
@@ -64,10 +98,15 @@ for (const [key, name] of Object.entries(fields)) {
   const label = document.createElement('label');
   label.htmlFor = 'field-' + key;
   label.textContent = name;
-  const input = document.createElement(key === 'note' ? 'textarea' : 'input');
+  const input = document.createElement(key === 'status' ? 'select' : key === 'note' ? 'textarea' : 'input');
+  if (key === 'status') {
+    const placeholder = new Option('Choose a status', '');
+    placeholder.disabled = true;
+    input.append(placeholder, ...statuses.map(status => new Option(status, status)));
+  }
   if (key === 'updated_at') input.type = 'date';
   if (key.endsWith('_link')) input.type = 'url';
-  input.required = key === 'code';
+  input.required = ['code', 'status'].includes(key);
   input.id = label.htmlFor;
   input.maxLength = 4000;
   field.append(label, input);
@@ -125,6 +164,8 @@ function populate(index) {
   const record = state.commissions[index] || {};
   get('editTitle').textContent = index === -1 ? 'New commission' : 'Edit ' + record.code;
   for (const key of Object.keys(inputs)) inputs[key].value = record[key] || '';
+  const status = String(record.status || '').trim().toLowerCase();
+  inputs.status.value = index === -1 ? 'Received' : statuses.find(value => value.toLowerCase() === status) || statusAliases[status] || '';
 }
 get('add').onclick = () => {
   get('message').textContent = '';
@@ -180,7 +221,7 @@ createServer(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'");
+  res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'");
   if (req.method === 'GET' && req.url === '/health') return json(res, 200, { ok: true });
   if (req.method === 'GET' && (req.url === '/' || req.url === '/admin/')) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -232,6 +273,7 @@ createServer(async (req, res) => {
     const record = Object.fromEntries(fields.map(key => [key, data.record[key].trim()]));
     const match = record.code.match(/^AU-?(\d{1,6})$/i);
     if (!match) return json(res, 400, { error: 'Use a tracking code like AU-4.' });
+    if (!statuses.includes(record.status)) return json(res, 400, { error: 'Choose a valid commission status.' });
     record.code = 'AU-' + Number(match[1]);
     if (commissions.some((item, i) => i !== data.index && Number(String(item.code).replace(/^AU-?/i, '')) === Number(match[1]))) {
       return json(res, 400, { error: 'This tracking code is already in use.' });
@@ -253,5 +295,6 @@ createServer(async (req, res) => {
       : json(res, 502, { error: 'Could not access the tracker data on GitHub. Check the Render configuration and try again.' });
   }
 }).listen(Number(process.env.PORT || 10000), '0.0.0.0');
+
 
 
