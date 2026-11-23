@@ -1,16 +1,7 @@
 {
-  "commissions": [
-    {
-      "code": "AU-3971",
-      "title": "QSSQ",
-      "status": "Received",
-      "updated_at": "2026-11-23",
-      "note": "",
-      "x_link": "",
-      "telegram_link": ""
-    }
-  ],
+  "commissions": [],
   "retired_codes": [
-    "AU-3"
+    "AU-3",
+    "AU-3971"
   ]
 }
