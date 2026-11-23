@@ -2,9 +2,9 @@
   "commissions": [
     {
       "code": "AU-3",
-      "status": "On-going",
+      "status": "Received",
       "title": "Sample Commission",
-      "x_link": "",
+      "x_link": "https://x.com/migorii_/status/2123752494631428492",
       "telegram_link": "",
       "updated_at": "2026-11-23",
       "note": "The storyline is being developed. Links will appear when the AU is published."
