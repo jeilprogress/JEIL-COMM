@@ -138,7 +138,7 @@
             <input class="search-field" id="trackingInput" name="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AU-3847" maxlength="15" aria-describedby="searchHelp" required />
             <button class="search-submit" id="searchBtn" type="submit"><span>TRACK STATUS</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 12h16m-7-7 7 7-7 7"/></svg></button>
           </div>
-          <div class="search-help" id="searchHelp"><span>Your tracking code is shared by email after your commission is received.</span><button type="button" class="sample-link" id="demoBtn">Try sample AU-3</button></div>
+          <div class="search-help" id="searchHelp"><span>Your tracking code is shared by email after your commission is received.</span></div>
         </form>
         <div id="resultMount" class="result-mount" aria-live="polite" aria-atomic="true"></div>
       </section>
@@ -177,7 +177,6 @@
     });
     const submitBtn = document.querySelector('#searchBtn');
     const themeBtn = document.querySelector('#themeBtn');
-    const demoBtn = document.querySelector('#demoBtn');
     document.querySelector('#year').textContent = new Date().getFullYear();
     const savedTheme = (() => { try { return localStorage.getItem('au-tracker-theme'); } catch { return null; } })();
     if (savedTheme === 'light') document.documentElement.dataset.theme = 'light';
@@ -284,7 +283,6 @@
       }
     }
     form.addEventListener('submit',event=>{event.preventDefault();lookup();});
-    demoBtn.addEventListener('click',()=>{input.value='AU-3';lookup();});
     const codeFromUrl = new URLSearchParams(location.search).get('code');
     if (codeFromUrl) {input.value=codeFromUrl;lookup();}
   })();
