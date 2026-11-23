@@ -30,6 +30,14 @@ async function github(method, data) {
   return response.json();
 }
 
+async function saveTracker(file, document, message) {
+  const saved = await github('PUT', {
+    branch: 'main', sha: file.sha, message,
+    content: Buffer.from(JSON.stringify(document, null, 2) + '\n').toString('base64')
+  });
+  return { sha: saved.content.sha, commissions: document.commissions };
+}
+
 const page = `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -71,6 +79,9 @@ body{font-family:"DM Sans",Arial,sans-serif;background:radial-gradient(ellipse a
 .field select{appearance:none;padding-right:42px;background:#0e0e0e linear-gradient(45deg,transparent 50%,#bbb 50%) calc(100% - 20px) 50% / 6px 6px no-repeat;background-image:linear-gradient(45deg,transparent 50%,#bbb 50%),linear-gradient(135deg,#bbb 50%,transparent 50%);background-position:calc(100% - 20px) 50%,calc(100% - 14px) 50%;background-size:6px 6px;background-repeat:no-repeat}
 @media(max-width:690px){.orbit{display:none}.hero{padding-top:57px}.hero h1{margin-block:20px}.hero p{font-size:13px}}
 @media(prefers-reduced-motion:reduce){.hero>div:first-child,.login-card,.grid,.orbit span{animation:none!important}}
+#deleteCommission[hidden]{display:none}
+dialog{width:min(440px,calc(100% - 36px));background:var(--panel);color:var(--fg);border:1px solid var(--line);padding:25px}
+dialog::backdrop{background:#000b}dialog h2{margin-top:0}dialog p{line-height:1.6}
 </style></head>
 <body><main class="wrap">
 <header class="head"><div class="brand-lockup"><div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20l4-.9L20 7a2 2 0 0 0-3-3L4.9 16 4 20Zm11-14 3 3"/></svg></div><div class="brand">JEIL COMM.<span>COMMISSION STUDIO</span></div></div><a href="https://jeilprogress.github.io/JEIL-COMM/">Public tracker ↗</a></header>
@@ -78,12 +89,17 @@ body{font-family:"DM Sans",Arial,sans-serif;background:radial-gradient(ellipse a
 <section id="loginPanel" class="panel login-card"><div class="panel-header"><h2>Admin sign-in</h2></div><form id="login"><div class="field"><label for="password">Admin password</label><input type="password" id="password" autocomplete="current-password" required></div><button class="btn primary">Sign in →</button><p id="loginMessage" class="feedback" role="status"></p></form></section>
 <section id="editor" hidden><div class="workspace-actions"><p class="tiny">Updates publish to the public tracker after you save.</p><button class="btn" id="logout" type="button">Sign out</button></div>
 <div class="grid"><section class="panel"><div class="panel-header"><h2>Commissions <span class="pill" id="count"></span></h2><button class="btn" id="add" type="button">+ New commission</button></div><div class="records" id="records" aria-label="Commissions"></div></section>
-<section class="panel"><div class="panel-header"><h2 id="editTitle">Edit commission</h2></div><form class="form-area" id="edit"><div class="form-grid" id="fields"></div><div class="form-actions"><button class="btn primary">Save to live tracker →</button><p id="message" class="feedback" role="status"></p></div></form>
+<section class="panel"><div class="panel-header"><h2 id="editTitle">Edit commission</h2></div><form class="form-area" id="edit"><div class="form-grid" id="fields"></div><div class="form-actions"><button class="btn primary">Save to live tracker →</button><button class="btn danger" id="deleteCommission" type="button" hidden>Delete commission</button><p id="message" class="feedback" role="status"></p></div></form>
 <form class="form-area" id="receipt" hidden style="border-top:1px solid var(--line)">
 <h2>Commission receipt</h2><p class="tiny">Confirm receipt manually, then send the client their tracking code from jlmigorii@gmail.com.</p>
 <div class="field"><label for="email">Client email</label><input id="email" type="email" maxlength="254" required></div>
 <div class="form-actions"><button class="btn primary">Send receipt</button><p id="receiptMessage" class="feedback" role="status"></p></div>
 </form></section></div></section>
+<dialog id="deleteDialog" aria-labelledby="deleteTitle" aria-describedby="deleteDescription">
+<h2 id="deleteTitle">Delete commission?</h2>
+<p id="deleteDescription"></p>
+<div class="form-actions"><button class="btn" id="cancelDelete" type="button" autofocus>Cancel</button><button class="btn danger" id="confirmDelete" type="button">Permanently delete</button></div>
+</dialog>
 <footer class="foot">Jeil Comm. · Commission Studio</footer>
 </main><script src="/admin.js" defer></script></body></html>`;
 
@@ -173,6 +189,7 @@ function populate(index) {
   const record = state.commissions[index] || {};
   get('editTitle').textContent = index === -1 ? 'New commission' : 'Edit ' + record.code;
   for (const key of Object.keys(inputs)) inputs[key].value = record[key] || '';
+  get('deleteCommission').hidden = index === -1;
   inputs.code.placeholder = 'Assigned when saved';
   get('receipt').hidden = index === -1 || record.status !== 'Received' || !/^AU-[1-9][0-9]{3}$/.test(record.code);
   get('email').value = '';
@@ -224,6 +241,30 @@ get('edit').onsubmit = async event => {
     get('message').textContent = error.message;
   } finally { editor.inert = false; button.disabled = false; button.focus(); }
 };
+const deleteDialog = get('deleteDialog');
+get('deleteCommission').onclick = () => {
+  const code = state.commissions[selected].code;
+  get('deleteDescription').textContent = 'Permanently remove ' + code + ' from the live tracker? Its tracking link will stop working.';
+  deleteDialog.showModal();
+};
+get('cancelDelete').onclick = () => deleteDialog.close();
+get('confirmDelete').onclick = async () => {
+  const {code} = state.commissions[selected];
+  const editor = get('editor');
+  editor.inert = true;
+  deleteDialog.close();
+  get('message').textContent = 'Deleting…';
+  try {
+    state = await request('DELETE', {sha: state.sha, index: selected, code});
+    populate(Math.min(selected, state.commissions.length - 1));
+    get('message').textContent = code + ' deleted. The public tracker will update shortly.';
+  } catch (error) {
+    get('message').textContent = error.message;
+  } finally {
+    editor.inert = false;
+    get('add').focus();
+  }
+};
 get('receipt').onsubmit = async event => {
   event.preventDefault();
   const button = event.currentTarget.querySelector('button');
@@ -262,7 +303,7 @@ createServer(async (req, res) => {
     return res.end(script);
   }
   const isReceipt = req.url === '/api/receipt' && req.method === 'POST';
-  if (!isReceipt && (req.url !== '/api/commissions' || !['GET', 'PUT'].includes(req.method))) {
+  if (!isReceipt && (req.url !== '/api/commissions' || !['GET', 'PUT', 'DELETE'].includes(req.method))) {
     return json(res, 404, { error: 'Page not found.' });
   }
   if (!token || !password || password.length < 16) {
@@ -318,6 +359,16 @@ createServer(async (req, res) => {
       } finally { sending.delete(code); }
     }
     if (data?.sha !== file.sha) return json(res, 409, { error: 'The tracker changed since you opened it. Keep a copy of your changes, then reload before saving.' });
+    if (req.method === 'DELETE') {
+      const record = Number.isInteger(data.index) && commissions[data.index];
+      if (!record || record.code !== data.code) {
+        return json(res, 400, { error: 'Select a saved commission to delete.' });
+      }
+      if (sending.has(record.code)) return json(res, 409, { error: 'Wait for the receipt to finish sending before deleting.' });
+      commissions.splice(data.index, 1);
+      document.retired_codes = [...(document.retired_codes || []), record.code];
+      return json(res, 200, await saveTracker(file, document, 'Delete commission ' + record.code));
+    }
     if (!Number.isInteger(data.index) || data.index < -1 || data.index >= commissions.length ||
         !data.record || fields.some(key => typeof data.record[key] !== 'string' || data.record[key].length > 4000)) {
       return json(res, 400, { error: 'Invalid commission details.' });
@@ -325,7 +376,8 @@ createServer(async (req, res) => {
     const record = Object.fromEntries(fields.map(key => [key, data.record[key].trim()]));
     if (!statuses.includes(record.status)) return json(res, 400, { error: 'Choose a valid commission status.' });
     if (data.index === -1) {
-      const used = new Set(commissions.map(item => Number(String(item.code).replace(/^AU-?/i, ''))));
+      const codes = [...commissions.map(item => item.code), ...(document.retired_codes || [])];
+      const used = new Set(codes.map(code => Number(String(code).replace(/^AU-?/i, ''))));
       const available = Array.from({length: 9000}, (_, i) => i + 1000).filter(code => !used.has(code));
       if (!available.length) return json(res, 409, { error: 'All four-digit tracking codes are in use.' });
       record.code = 'AU-' + available[randomInt(available.length)];
@@ -338,11 +390,7 @@ createServer(async (req, res) => {
     if (!record.updated_at) record.updated_at = new Date().toISOString().slice(0, 10);
     if (data.index === -1) commissions.push(record);
     else commissions[data.index] = { ...commissions[data.index], ...record };
-    const saved = await github('PUT', {
-      branch: 'main', sha: file.sha, message: 'Update commission ' + record.code,
-      content: Buffer.from(JSON.stringify(document, null, 2) + '\n').toString('base64')
-    });
-    return json(res, 200, { sha: saved.content.sha, commissions });
+    return json(res, 200, await saveTracker(file, document, 'Update commission ' + record.code));
   } catch (error) {
     return error.status === 409
       ? json(res, 409, { error: 'Another edit was saved first. Reload the admin page and try again.' })
