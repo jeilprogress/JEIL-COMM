@@ -1,15 +1,6 @@
 {
   "commissions": [
     {
-      "code": "AU-3",
-      "status": "Received",
-      "title": "Sample Commission",
-      "x_link": "https://x.com/migorii_/status/2123752494631428492",
-      "telegram_link": "",
-      "updated_at": "2026-11-23",
-      "note": "The storyline is being developed. Links will appear when the AU is published."
-    },
-    {
       "code": "AU-3971",
       "title": "QSSQ",
       "status": "Received",
@@ -18,5 +9,8 @@
       "x_link": "",
       "telegram_link": ""
     }
+  ],
+  "retired_codes": [
+    "AU-3"
   ]
 }
